@@ -56,22 +56,22 @@ You as a user should not need to use Google Apps Script beyond the initial setup
 For the system to work appropriately you will need to have the following things done: 
 1. All events you create have **keywords in their descriptions** and **no keywords in their calendar name.** Remember that the keywords in the description should describe what resources are being _used_.
 
-     **a.** The last paragraph of the description should be formatted **<< {Duration (in minutes)} | {List of Comma-Separated Keywords} >>** With no new-line breaks. See the example below. You can type any unit signifier for the minutes you like (‘min’, ‘mins’, ‘m’, ‘minutes’, or nothing at all)
+    - The last paragraph of the description should be formatted **<< {Duration (in minutes)} | {List of Comma-Separated Keywords} >>** With no new-line breaks. See the example below. You can type any unit signifier for the minutes you like (‘min’, ‘mins’, ‘m’, ‘minutes’, or nothing at all)
+      
+    - The Exception Rules for the event should be for any keyword that does not conflict with this event. For an event using the KeySpace_1 space, the event should have an exception for every other space offered by your team(s).
+    - **Exception rules on round-robin events need to be made for each host.** The creator of the event is not able to make global exceptions.
+
 ![sample_image](images/event_description.png)
-
-     **b.** The Exception Rules for the event should be for any keyword that does not conflict with this event. For an event using the KeySpace_1 space, the event should have an exception for every other space offered by your team(s).
-
-     **c.** **Exception rules on round-robin events need to be made for each host.** The creator of the event is not able to make global exceptions.
 
 3. The two workflows you set up must include the relevant event info in an email to the shop calendar:
 
-     **a.** The subject line must start with the action being done. If scheduling a new event, it should start with “new.” If cancelling, it should start with “cancel.” Case does not matter.
+    - The subject line must start with the action being done. If scheduling a new event, it should start with “new.” If cancelling, it should start with “cancel.” Case does not matter.
 
-     **b.** The workflow must send an email to the host email
+    - The workflow must send an email to the host email
 
-     **c.** The workflow must have “send from no-reply” checked
+    - The workflow must have “send from no-reply” checked
 
-     **d.** The body of the message must follow this format EXACTLY:
+    - The body of the message must follow this format EXACTLY:
     
 ![sample_image](images/workflows.png)
 
