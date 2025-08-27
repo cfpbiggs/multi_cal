@@ -67,7 +67,7 @@ For the system to work appropriately you will need to have the following things 
 
      **a.** The subject line must start with the action being done. If scheduling a new event, it should start with “new.” If cancelling, it should start with “cancel.” Case does not matter.
 
-     **b.** The workflow must send an email to <teachandlearnshops@gmail.com>
+     **b.** The workflow must send an email to the host email
 
      **c.** The workflow must have “send from no-reply” checked
 
