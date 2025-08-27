@@ -47,7 +47,7 @@ In that subsection, you have the option to change what the event will be called 
 
 No variables or descriptors you decide to include in the invitation’s title can include keywords or else the system may erroneously double book you. This is why you put keywords in the Event Description instead. When you set up your workflow, these Event Descriptions are what tells multi_cal what keywords to add to the shared-resource events.
 
-[[INSERT IMAGE OF THIS PART OF CALENDLY]]
+![sample_image](images/cal_invite.png)
 
 
 ## Workflows and Google Apps Script
@@ -57,7 +57,7 @@ For the system to work appropriately you will need to have the following things 
 1. All events you create have **keywords in their descriptions** and **no keywords in their calendar name.** Remember that the keywords in the description should describe what resources are being _used_.
 
      **a.** The last paragraph of the description should be formatted **<< {Duration (in minutes)} | {List of Comma-Separated Keywords} >>** With no new-line breaks. See the example below. You can type any unit signifier for the minutes you like (‘min’, ‘mins’, ‘m’, ‘minutes’, or nothing at all)
-[[INSERT IMAGE OF EVENT DESCRIPTION]]
+![sample_image](images/event_description.png)
 
      **b.** The Exception Rules for the event should be for any keyword that does not conflict with this event. For an event using the KeySpace_1 space, the event should have an exception for every other space offered by your team(s).
 
@@ -73,7 +73,7 @@ For the system to work appropriately you will need to have the following things 
 
      **d.** The body of the message must follow this format EXACTLY:
     
-[[INSERT IMAGES OF THE TWO WORKFLOW SETUPS]]
+![sample_image](images/workflows.png)
 
 _**The comma and space between Event Date and Event Time are both required.**_
 
@@ -130,7 +130,7 @@ i.e. to get both of the above effects, the event would have the description keyw
 
 This does not interfere with the normal system, as because TAG[X] includes TAG, anything with a TAG exception will still correctly ignore the TAG[X] events.
 
-
+![sample_image](images/occupancy_exception_rules.png)
 
 
 
