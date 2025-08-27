@@ -122,13 +122,13 @@ An overlapping event, “Event 2” with description keyword “KeySpace_1[2]”
 
 **Exception Rules:**
 
-To allow a space to be double booked: the event booking rules for an occupancy-based keyword require an exception for events with the same keyword occupancy tag.
+To allow a space to be double booked: the event booking rules for an occupancy-based keyword require an exception for events with the _same_ keyword occupancy tag.
 
 To allow a single supervisor for multiple events in the same keyword-space, an exception for the relevant sharing keyword is also necessary.
 
 i.e. to get both of the above effects, the event would have the description keyword TAG[X] and would have an exception rule for the same TAG[X] as well as for ShareTAG.
 
-This does not interfere with the normal system, as because TAG[X] includes TAG, anything with a TAG exception will still correctly ignore the TAG[X] events.
+This does not interfere with the normal system, as because TAG[X] includes TAG, anything with a TAG exception will still correctly ignore the TAG[X] events and anything not compatible with ShareTAG will still be blocked.
 
 ![sample_image](images/occupancy_exception_rules.png)
 
