@@ -103,9 +103,8 @@ For resource sharing, the format is similar, but the convention I use is “Shar
 
 The code does not look for this convention, so you can adopt any style that you see fit. HOWEVER, as with keywords in general, **you must be prudent that no share keyword _contains_ another keyword within itself.** Otherwise exceptions may be applied when they should not be. 
 
-Generally, the share keyword exists to allow yourself to be double-booked as an individual under the right circumstances in addition to allowing spaces/resources to be double-booked (if you do not want this behavior, simply do not include the share keyword in the calendar invite title). Were it not for the share keyword, a space might allow multiple events to be booked within it but Calendly would look for a different supervisor for each event wanting to use the space. For the event example below, it has two keywords with sharing modifiers.
+Generally, the share keyword exists to allow yourself to be double-booked as an individual under the right circumstances in addition to allowing spaces/resources to be double-booked (if you do not want this behavior, simply do not include the share keyword in the calendar invite title). Were it not for the share keyword, a space might allow multiple events to be booked within it but Calendly would look for a different supervisor for each event wanting to use the space.
 
-![sample_image](images/occupancy_exception_rules.png)
 
 
 ## Order of Operations: 
@@ -130,6 +129,7 @@ i.e. to get both of the above effects, the event would have the description keyw
 
 This does not interfere with the normal system, as because TAG[X] includes TAG, anything with a TAG exception will still correctly ignore the TAG[X] events and anything not compatible with ShareTAG will still be blocked.
 
+![sample_image](images/occupancy_exception_rules.png)
 
 
 
