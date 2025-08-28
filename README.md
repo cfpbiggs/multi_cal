@@ -10,7 +10,7 @@ For multi_cal to work, it needs to be hosted on a dedicated email account. Eithe
 
 
 # Structure Overview
-1. All event descriptions in Calendly must include keywords that indicate what shops and/or resources are **in use** during that event. These will follow a specific format.
+1. All event descriptions in Calendly must include keywords that indicate what spaces and/or resources are **in use** during that event. These will follow a specific format.
     - Shop/space and resource/equipment keywords cannot be shared across items that are completely independent of one another (i.e. two identical tools that are in separate shops/spaces will require two distinct keywords).
 2. Multiple calendars must always be checked, but **only your personal calendar should be scheduled on.**
     - The scheduler’s calendar is used to check if the individual is available
