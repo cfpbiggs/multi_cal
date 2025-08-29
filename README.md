@@ -1,5 +1,5 @@
 # multi_cal Overview
-multi_cal is a utility built for Calendly and Google Apps Script. Its purpose is to fill in the gaps of Calendly's capabilities and make full use of the Google Suite's services. 
+multi_cal is a utility built on behalf of the Harvard SEAS Active Learning Labs for bridging Calendly and Google Apps Script. Its purpose is to fill in the gaps of Calendly's capabilities on the client-side through the use of the Google Suite's API.
 
 multi_cal enables users to schedule events via Calendly that reserve specific shared resources and which occupy spaces/use resources in a non-blocking manner.
 
