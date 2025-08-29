@@ -10,10 +10,10 @@ const OCCUPANCY_RULES = {
   "Resource_3": 3,
 };
 
-// Some keywords represent subsets of a larger keyword. For instance Fusion24 is a subset of LaserRoom. As such, if an event is marked "Fusion24" it should also be marked "LaserRoom" so that
-// an event looking to book for a separate shop doesn't need to have exceptions for every tool inside LaserRoom (or for any other shop not in this example).
+// Some keywords represent subsets of a larger keyword. For instance Resource_1 is a subset of KeySpace_1. As such, if an event is marked Resource_1 it should also be marked KeySpace_1 so that
+// an event looking to book for a separate KeySpace doesn't need to have exceptions for every sub-resource inside KeySpace_1 (or for any other umbrella space not in this example).
 const KEYWORD_TREE = {
-  // Resource keywords and their associated shop keywords
+  // Resource/equipment keywords and their associated space/umbrella keywords
   "Resource_1": "KeySpace_1",
   "Resource_2": "KeySpace_2",
   "Resource_3": "KeySpace_2",
@@ -21,7 +21,8 @@ const KEYWORD_TREE = {
   "Resource_5": "KeySpace_3",
 }
 
-// This tree groups the keywords into a physical/departmental category. Each physical/departmental category then has its own calendar ID
+// This tree groups the keywords into a physical/departmental category. Each physical/departmental category then has its own calendar ID. Categories do not interface with Calendly, they are simply a means of
+// organizing shared calendars in the event there are multiple.
 const CALENDAR_TREE = {
   // Keywords and their associated category
   "KeySpace_1": "Category_1",
@@ -38,7 +39,7 @@ const CALENDAR_TREE = {
 }
 
 function readEmail() {
-  // This is recommended to be run every minute. This can be changed in the "Triggers" sidetab of Google Apps Script. 
+  // This function is recommended to be run every minute. This can be changed in the "Triggers" sidetab of Google Apps Script. 
 
   // We want to only check for unread Calendly emails, this will save compute time and prevent acknowledging spam.
   var senderEmail = 'no-reply@calendly.com';
