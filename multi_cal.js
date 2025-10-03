@@ -42,10 +42,11 @@ const CALENDAR_TREE = {
   "KeySpace_5": "Category_3",
   "KeySpace_6": "Category_3",
 
-  // Group Events and their associated category
-  "Group Event 1" : "Category_2",
-  "Group Event 2" : "Category_2",
-  "Group Event 3" : "Category_3",
+  // Group Events and their associated category. Note: Group Events are meant to be public-facing and should not be kept on the same calendar as keyword/occupancy events.
+  // Group Events do not include keywords (unless keywords are present in the title), so they may interfere with keyword-based scheduling if put on the same calendar.
+  "Group Event 1" : "Category_4",
+  "Group Event 2" : "Category_4",
+  "Group Event 3" : "Category_5",
 
   // Categories and their associated calendar ID
   "Category_1" : "<<INSERT CAL_ID FOR CATEGORY_1>>",
