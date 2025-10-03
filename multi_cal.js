@@ -410,11 +410,17 @@ function createGroupEvent(groupEventCalendar, title, startTime, endTime, descrip
   
   // Group events are supposed to have a link to the booking page at the end of the description (but before the keywords)
   let descriptionLines = description.split("\n");
-  let base_link = descriptionLines.pop();
-  let join_link = createInstanceLink(base_link, startTime);
-  let signup_hook = "Interested in joining? Sign up here:\n" + join_link + "\n" + title + "\n";
+  let baseLink = descriptionLines.pop();
+  let joinLink = createInstanceLink(baseLink, startTime);
+  let signupHook = "Interested in joining? Sign up here:\n" + joinLink + "\n" + title + "\n";
+  let newTitle = title;
 
-
+  if (minimum === 0){
+    newTitle = GROUP_EVENT_PREFIXES[1] + newTitle;
+  }
+  else{
+    newTitle = GROUP_EVENT_PREFIXES[0] + newTitle;
+  }
   
   // Re-assemble the description now that the link is removed.
   description = descriptionLines.join("\n");
@@ -422,8 +428,8 @@ function createGroupEvent(groupEventCalendar, title, startTime, endTime, descrip
 
   
   // Create the event
-  calendar.createEvent("Tentative: " + title, new Date(startTime), new Date(endTime), {
-      description: enrollmentDetails + signup_hook + "Tags: " + keys.join(", ") + "\n" + description,
+  calendar.createEvent(newTitle, new Date(startTime), new Date(endTime), {
+      description: enrollmentDetails + signupHook + "Tags: " + keys.join(", ") + "\n" + description,
     });
   
 }
@@ -502,7 +508,8 @@ function adjustGroupEvent(event, direction){
     // If there is no minimum number of enrollees left to confirm, change the event title to Confirmed + Title
     if (minimum <= 0){
       descriptionLines[1] = "0 more signups required! The minimum enrollment has been met for this meeting.";
-      updatedTitle = "Confirmed: " + title;
+      // Set title to Confirmed
+      updatedTitle = GROUP_EVENT_PREFIXES[1] + title;
     }
     // If the minimum number of enrollees hasn't been met yet, keep the title as Tentative and show the number needed for confirmation.
     else if (minimum > 0){
@@ -512,15 +519,15 @@ function adjustGroupEvent(event, direction){
       else{
         descriptionLines[1] = minimum + " more sign-ups required to confirm.";
       }
-      
-      updatedTitle = "Tentative: " + title;
+      // set Title to Tentative
+      updatedTitle = GROUP_EVENT_PREFIXES[0] + title;
     }
     
     // If the event is full or seems like it might be overbooked, mark it as full and replace the instance-specific signup link with the general booking page.
     if (enrollment >= eventEnrollmentRules[2]){
       descriptionLines[2] = "This event is full! If you need to schedule a training, please book a new training slot using the following link.";
       descriptionLines[3] = descriptionLines[3].match(/(.*)\d{4}-\d{2}-\d{2}.*/)[1];
-      updatedTitle = "Full: " + title;
+      updatedTitle = GROUP_EVENT_PREFIXES[2] + title;
     }
 
     // If the event WAS full but has since been reduced, return the instance-specific signup link and invitation message.
@@ -600,7 +607,7 @@ function checkEnrollments(){
     eventBuffer = ENROLLMENT_RULES[titles[i]][0];
 
     // Search for tentative events with the same title
-    let eventTitle = "Tentative: " + titles[i];
+    let eventTitle = GROUP_EVENT_PREFIXES[0] + titles[i];
     let events = findUpcomingGroupEvent(enrolledCalendar, eventTitle);
     Logger.log("Found " + events.length + " events to cancel.");
     for (let j = 0; j < events.length; j++){
@@ -625,7 +632,7 @@ function checkEnrollments(){
     }
 
     // Search for confirmed events with the same title
-    eventTitle = "Confirmed: " + titles[i];
+    eventTitle = GROUP_EVENT_PREFIXES[1] + titles[i];
     events = findUpcomingGroupEvent(enrolledCalendar, eventTitle);
     Logger.log("Found " + events.length + " events to update occupancy for.");
     for (let j = 0; j < events.length; j++){
