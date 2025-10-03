@@ -151,7 +151,7 @@ This value means that our Resource_1 Training must reach an enrollment of 3 peop
 Event Description:
 Event descriptions will need to include a link to the booking page on a separate line immediately before the event duration and keywords. This link will be modified by the script to send individuals directly to the instance-specific booking when an event is clicked on from the calendar.
 
-<< EVENT DESCRIPTION EXAMPLE IMAGE >>
+![sample_image](images/Enrollment_Rules_Event_Description.png)
 
 **Basic Keywords:**
 The event must have “Group” as its first keyword if it is a group event. Any number (or zero) keywords may follow it.
