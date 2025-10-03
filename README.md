@@ -132,6 +132,58 @@ This does not interfere with the normal system, as because TAG[X] includes TAG, 
 ![sample_image](images/occupancy_exception_rules.png)
 
 
+# The Enrollment Feature (Optional)
+## Overview:
+The Occupancy Feature and most other features of this setup do not account for group events. The idea is that group events can be scheduled inherently by checking if there is space and staff available through the occupancy feature. But what if you want to eliminate any meetings with a single student? To ensure a minimum number of students are enrolled in a training (and to display the available slots to the students), users must employ this Enrollment Feature.
+
+The Enrollment Feature works very similarly to the Occupancy Feature however, instead of working with one-on-one events and keywords, the Enrollment Feature works with group events in Calendly and requires no additional sharing keywords like the Occupancy Feature does (unless you are trying to use the Occupancy Feature in tandem with this one). The Enrollment Feature adds a link with the appropriate event and timestamp information embedded to the shared events so that students can add themselves onto the events simply by checking the calendar and following that link. The link is removed once maximum occupancy is reached.
+
+The title of these events reflect whether the event is full, available, or still tentative. If not enough people have signed up yet, it remains “Tentative.” Then it moves to “Confirmed.” Then, once all spots are filled, it moves to “Full.”
+
+If the event is still Tentative when the confirmation window ends, the event is cancelled automatically. This information is kept in the ENROLLMENT_RULES dictionary as a triple. The Key will be the event name and the information associated will be the modification deadline, the minimum enrollment, and the maximum enrollment. That modification deadline is the amount of time in minutes before the scheduled event by which the event must reach minimum capacity. If you want your event to be cancelled an hour ahead of time if there aren’t enough people, that number would be 60. If you want your event to be cancelled a day ahead of time, that number would be 1440.
+
+Example: 
+“Resource_1 Training” : [1440, 3, 6]
+
+This value means that our Resource_1 Training must reach an enrollment of 3 people 1440 mins (24hrs) in advance of the event start and that no more than 6 people may sign up.
+
+## Setup:
+Event Description:
+Event descriptions will need to include a link to the booking page on a separate line immediately before the event duration and keywords. This link will be modified by the script to send individuals directly to the instance-specific booking when an event is clicked on from the calendar.
+
+![sample_image](images/enrollment_rules_event_description.png)
+
+**Basic Keywords:**
+The event must have “Group” as its first keyword if it is a group event. Any number (or zero) keywords may follow it.
+
+For the exception rules, if you are using keywords, there are no changes to how that works. Just apply them as you would normally.
+
+**Occupancy Keywords:**
+Any occupancy-based keywords should reflect the maximum enrollment of the group event. 
+
+*If there are resources being used for the group event that have fewer spaces than there are enrollees, the maximum for that resource should be entered for that keyword.* For example, if Resource_1 only has 2 spaces but this group event has a maximum enrollment of 5, the correct Occupancy Keyword to use is Resource_1[2].
+
+*If the resource can fit more than the max enrollment, then the max enrollment number should be used instead.* For example, if the event’s max enrollment is 5 and it is using Resource_2 (which can fit 6 spaces), it should be tagged Resource_2[5].
+
+*For Share Keywords, you will need to include them in the title of the event.* This is a bit clunky, but there is no way to edit the calendar invite for a Group Event, so if you want to use a Share Keyword to make use of the Occupancy Feature, it will have to go in the event’s title on Calendly. Be sure that this is also reflected in the dictionaries as appropriate.
+
+## Apps-Script Setup:
+On the hosting account, update the ENROLLMENT_RULES dictionary and the CALENDAR_TREE Dictionary.
+
+As mentioned in the overview, the ENROLLMENT_RULES dictionary tells the script when to stop accepting updates to the event, what the minimum enrollment is, and what the maximum enrollment is. This allows the script to keep track of how to title events according to the current enrollment numbers.
+
+The event title will need to be put into the CALENDAR_TREE dictionary as well as though it were a keyword. The event title should work be the key and that key should be associated with whichever user-facing calendar group is most relevant.
+
+## Calendar Interface:
+The calendar that Group Events are placed on should be separate from the keyword/occupancy calendars so that the calendar may be shared with students directly. This public-facing calendar allows students to join existing slots in order to more efficiently meet minimums.
+
+Users can use a link on the event to sign up for that same time-slot until the event is full. If the sign-up window has elapsed, then the event will either be cancelled (if it did not meet the minimum enrollment) or it will remain confirmed but the join link will be removed.
+
+When an event is cancelled, a placeholder event is kept on the calendar to show users that the event at that timew as cancelled. The "Cancelled" event will no longer have a signup description, but it will still include the event name in the title. The event will also be set to “Free” to prevent it from showing up as busy elsewhere. 
+
+**Note:** This script *does not send email updates.* In order to do so, it would need to collect personal information from Calendly, and that would require more security features to be implemented than I can provide. Users should be instructed to keep track of the public calendar and to use the calendar to verify whether their events are confirmed or not.
+
+
 
 # Maintaining the Code
 To ensure functionality, there are a couple areas of the code that will need updating whenever the usage expands. They are the three constant dictionaries at the start of the code. First is the OCCUPANCY_RULES dictionary.
