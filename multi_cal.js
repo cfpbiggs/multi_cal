@@ -10,6 +10,16 @@ const OCCUPANCY_RULES = {
   "Resource_3": 3,
 };
 
+
+// For Group/Enrollment-based events, we keep track of the confirmation window (in minutes), the minimum enrollment, and the maximum enrollment. The key in this dictionary must match the
+// title of the corresponding event in Calendly EXACTLY. The confirmation window should also match the setting in Calendly for how far in advance a person must schedule the event.
+const ENROLLMENT_RULES = {
+  "Group Event 1" : [1440, 2, 3],
+  "Group Event 2" : [60, 1, 10],
+  "Group Event 3" : [2880, 10, 30],
+}
+
+
 // Some keywords represent subsets of a larger keyword. For instance Resource_1 is a subset of KeySpace_1. As such, if an event is marked Resource_1 it should also be marked KeySpace_1 so that
 // an event looking to book for a separate KeySpace doesn't need to have exceptions for every sub-resource inside KeySpace_1 (or for any other umbrella space not in this example).
 const KEYWORD_TREE = {
@@ -32,43 +42,53 @@ const CALENDAR_TREE = {
   "KeySpace_5": "Category_3",
   "KeySpace_6": "Category_3",
 
+  // Group Events and their associated category
+  "Group Event 1" : "Category_2",
+  "Group Event 2" : "Category_2",
+  "Group Event 3" : "Category_3",
+
   // Categories and their associated calendar ID
   "Category_1" : "<<INSERT CAL_ID FOR CATEGORY_1>>",
   "Category_2" : "<<INSERT CAL_ID FOR CATEGORY_2>>",
   "Category_3" : "<<INSERT CAL_ID FOR CATEGORY_3>>",
 }
 
+// These are the three prefixes used on Group/Enrollment based events. They do not need to change.
+const GROUP_EVENT_PREFIXES = ["Tentative: ", "Confirmed: ", "Full: "];
+// This is the amount of time our automatic group event-checker will look ahead for events in need of cancelling. The longer it is, the longer the checker will take to run. 10080 is 1 week in minutes.
+const GROUP_EVENT_LOOKAHEAD = 10080;
+
 function readEmail() {
   // This function is recommended to be run every minute. This can be changed in the "Triggers" sidetab of Google Apps Script. 
 
   // We want to only check for unread Calendly emails, this will save compute time and prevent acknowledging spam.
-  var senderEmail = 'no-reply@calendly.com';
-  var threads = GmailApp.search('from:' + senderEmail + ' is:unread');  // Search for unread messages from the specific sender
-  var shopCalendar = ""; // This where the ID of the calendar is stored once an event needs to be scheduled
+  let senderEmail = 'no-reply@calendly.com';
+  let threads = GmailApp.search('from:' + senderEmail + ' is:unread');  // Search for unread messages from the specific sender
+  let shopCalendar = ""; // This where the ID of the calendar is stored once an event needs to be scheduled
 
   Logger.log("Checking Messages.");
 
   // Once we have our list of threads to read, we go through all of them
   for (let j = 0; j < threads.length; j++){
     // For each thread, we get a list of messages within that thread (a thread is a list of messages with the same subject line)
-    var messages = threads[j].getMessages();
+    let messages = threads[j].getMessages();
 
     // Keep our messages in buckets until we are done looping and can clear them away.
-    var deleteMessages = [];
-    var readMessages = [];
+    let deleteMessages = [];
+    let readMessages = [];
     // Check every message in the thread
     for (let k = 0; k < messages.length; k++){
 
       // Open a specific message
-      var message = messages[k];
+      let message = messages[k];
 
       // While the thread may have been marked unread, that doesn't mean that *all* of the messages within the thread were unread. It usually means the most recent message is unread.
       // If this message has already been read, skip it.
       if(!message.isUnread()) continue;
 
       // Check the subject line of the message
-      var subject = message.getSubject().substring(0,3).toUpperCase(); // We only need the first three characters to know what we're doing.
-      var body = htmlDeleter(message.getBody()); // Retrieve event information from the HTML block in the body of the message
+      let subject = message.getSubject().substring(0,3).toUpperCase(); // We only need the first three characters to know what we're doing.
+      let body = htmlDeleter(message.getBody()); // Retrieve event information from the HTML block in the body of the message
 
       // Check that the email body has the right number of lines for an event email. If it doesn't, skip it.
       if (body.length < 3){
@@ -80,13 +100,10 @@ function readEmail() {
 
       // If the email body was long enough, we'll try to actually read out the information it contained.
       else{
-        var title, keywords, start, end, des;
+        let title, keywords, start, end, des;
         // Try to parse the email body into event details
         try{
           [title, keywords, start, end, des] = parseEmailBody(body);
-          
-          //Logger.log("Title: " + title);
-          //Logger.log("Keywords: " + keywords);
         }
         catch (e) {
           message.markRead();
@@ -95,92 +112,8 @@ function readEmail() {
           continue
         }
 
-        // Keep track of the adjusted titles used for different events
-        var subtitle;
-
-        // We will be nesting another for loop, so we want to be able to detect when we need to skip the message deletion step.
-        var deleteFlag = true;
-
-        // To get full use out of Calendly's Free/Busy Exception rules, we need to create/look for a separate calendar event for each keyword on the email event.
-        for (let i = 0; i < keywords.length; i++){
-          Logger.log("Keyword: " + keywords[i]);
-          // Check if this event has an occupancy tag at the end (square brackets containing a number). The function returns the base keyword and -1 for num if there was no occupancy provided
-          var [base, num] = separateOccupancy(keywords[i]);
-          var busy = true;
-          
-          // The subtitle for the event should be the title plus what resource is being used.
-          subtitle = title + " Using: " + base;
-
-          // Check if the keyword is a subset of a larger keyword. If so, add the superset keyword to the title.
-          while(base in KEYWORD_TREE){
-            var parent = KEYWORD_TREE[base];
-            // add the superset to the title
-            subtitle = subtitle + ", " + parent;
-            // set base to parent in case the superset is, itself, a subset of another keyword. If it isn't, the loop will break.
-            base = parent;
-          }
-
-          // Find the relevant shop calendar for the keyword using the new base using the same method as before
-          while(base in CALENDAR_TREE){
-            var parent = CALENDAR_TREE[base];
-            // Set base to parent so that the loop can run again if the parent is the category rather than the calendar ID. If it is the calendar ID, the loop will break.
-            base = parent;
-          }
-          shopCalendar = base;
-
-
-          // Create an event for this keyword if the email is about scheduling.
-          if (subject === "NEW"){
-            // If the keyword was occupancy-tagged, check the calendar for other occupancies and make sure the base-only event placed on the calendar is marked as "Free"
-            if (num != -1){
-              // Adjust the occupancy labels on the calendar for this keyword
-              adjustOccupancy(shopCalendar, keywords[i], start, end, false);
-              // For occupancy-based events, we set the free/busy of the event to "free"
-              busy = false;
-            }
-
-            // Try creating a new event using the extracted information. If this does not work, log the body of the email.
-            try {
-              createEvent(shopCalendar, subtitle, start, end, des, busy);
-              Logger.log("Event \"" + subtitle + "\" Created");
-            }
-            catch (e) {
-              Logger.log("Problem creating new event. " + e.message);
-              Logger.log(body);
-              deleteFlag = false;
-            }
-          
-          }
-
-          // Cancel any existing event for this keyword if the email is about cancelling
-          else if (subject === "CAN"){
-            // If the keyword was occupancy-tagged, check the calendar for other occupancies and cancel the base-only event.
-            if (num != -1){
-              adjustOccupancy(shopCalendar, keywords[i], start, end, true);
-            }
-            // To cancel an event we must first find it on the Google Calendar.
-            var eventToModify = findEvent(shopCalendar, subtitle, start, end);
-            
-            // Try to delete the event (If multiple events or no events are found, the value will be 'null')
-            try{
-              if (eventToModify == null){
-                Logger.log("Event details are valid, but it cannot be cancelled.")
-                deleteFlag = false;
-              }
-
-              else{
-                eventToModify.deleteEvent();
-                Logger.log("Event \"" + subtitle + "\" Canceled");
-              }
-              
-            }
-            catch(e){
-              Logger.log("Problem canceling event. " + e.message);
-              Logger.log(body);
-              deleteFlag = false;
-            }
-          }
-        }
+        // Use the extracted details to add or remove the event from the schedule and record whether the message ought to be deleted.
+        let deleteFlag = adjustSchedule(title, subject, keywords, start, end, des);
         
         // Delete the email after logging the output if everything ran correctly
         if (deleteFlag){
@@ -197,8 +130,164 @@ function readEmail() {
       }
     }
   }
-
   Logger.log("All Messages Handled.");
+}
+
+// Takes in event details and performs the necessary scheduling actions. Returns a flag to indicate the success of the operation.
+function adjustSchedule(title, subject, keywords, start, end, des){
+  // Keep track of the adjusted titles used for different events
+  let subtitle;
+  // This flag keeps track of whether all processes completed successfully.
+  let successFlag = true;
+  // We will need to keep track of whether this is a Group/Enrollment based event. If it is, the first keyword will be the word "Group." For adjusting occupancies, we'll need to account for
+  // only the first person who schedules into this event (if 1 person schedules an event for up to 6 people, we reserve 6 spots until the sign-up time has finished. Once the signup time
+  // passes, if enough people signed up, we adjust the occupancy to reflect the number who signed up. If not enough signed up, we fully cancel the 6 reserved spots.)
+  // The "Group Event" flag gets set to false only at the top of each message
+  let groupFlag = false;
+  let groupFlagBlocker = false;
+  let groupKeywords;
+
+  if (keywords.length > 0){
+    if (keywords[0].toUpperCase() === "GROUP"){
+      groupFlag = true;
+      groupKeywords = keywords.slice(1,keywords.length);
+    }
+  }
+  
+  Logger.log("Group Flag is " + groupFlag);
+
+  let groupCal = title;
+  while (groupCal in CALENDAR_TREE){
+    groupCal = CALENDAR_TREE[groupCal];
+  }
+  // This flag is non-blocking (i.e. defaults to True) unless the event is actually a group event and there is an existing entry for it. It must only be reset outside of the keyword loop.
+  let newGroupEvent = true;
+
+
+  // To get full use out of Calendly's Free/Busy Exception rules, we need to create/look for a separate calendar event for each keyword on the email event.
+  for (let i = 0; i < keywords.length; i++){
+    
+    Logger.log("Keyword: " + keywords[i]);
+    // Check if this event has an occupancy tag at the end (square brackets containing a number). The function returns the base keyword and -1 for num if there was no occupancy provided
+    let [base, num] = separateOccupancy(keywords[i]);
+    let busy = true;
+    
+    // The subtitle for the event should be the title plus what resource is being used.
+    subtitle = title + " Using: " + base;
+
+    // Check if the keyword is a subset of a larger keyword. If so, add the superset keyword to the title.
+    while(base in KEYWORD_TREE){
+      let parent = KEYWORD_TREE[base];
+      // add the superset to the title
+      subtitle = subtitle + ", " + parent;
+      // set base to parent in case the superset is, itself, a subset of another keyword. If it isn't, the loop will break.
+      base = parent;
+    }
+    // Find the relevant shop calendar for the keyword using the new base using the same method as before
+    while(base in CALENDAR_TREE){
+      let parent = CALENDAR_TREE[base];
+      // Set base to parent so that the loop can run again if the parent is the category rather than the calendar ID. If it is the calendar ID, the loop will break.
+      base = parent;
+    }
+    shopCalendar = base;
+
+    // Create an event for this keyword if the email is about scheduling.
+    if (subject === "NEW"){
+      let existingGroupEvent;
+      if (i == 0){
+        // Check if any event exists for this event item yet but only if we're on the first
+        existingGroupEvent = findGroupEvent(groupCal, title, start, end);
+        // If there is an existing event, this is not new!
+        if (existingGroupEvent != null){
+          newGroupEvent = false;
+        }
+      }
+      // If the keyword was occupancy-tagged, check the calendar for other occupancies and make sure the base-only event placed on the calendar is marked as "Free"
+      if (num != -1 && newGroupEvent){
+        // Adjust the occupancy labels on the calendar for this keyword
+        adjustOccupancy(shopCalendar, keywords[i], start, end, false);
+        // For occupancy-based events, we set the free/busy of the event to "free"
+        busy = false;
+      }
+
+      // Try creating a new event using the extracted information. If this does not work, log the body of the email.
+      try {
+        // If the group flag is enabled and this is, indeed, a new group event, create a Group Event on the calendar.
+        if (groupFlag && newGroupEvent && i == 0){
+          createGroupEvent(groupCal, title, start, end, des, groupKeywords);
+        }
+        // If it is a group event but an entry already exists, we must update the old group event (this should only be done if "Group" is the current keyword).
+        else if (groupFlag && !newGroupEvent && i == 0){
+          Logger.log("Sending Group Event for adjustment:");
+          Logger.log(newGroupEvent);
+          adjustGroupEvent(existingGroupEvent, true);
+        }
+        // If it is not a group event or if this is a new group event, create a normal event on the calendar
+        else if (!groupFlag || newGroupEvent) {
+          createEvent(shopCalendar, subtitle, start, end, des, busy);
+          Logger.log("Event \"" + subtitle + "\" Created");
+        }
+      }
+      catch (e) {
+        Logger.log("Problem creating new event. " + e.message);
+        Logger.log(des);
+        successFlag = false;
+      }
+
+    }
+
+    // Cancel any existing event for this keyword if the email is about cancelling
+    else if (subject === "CAN"){
+      // If it's a group event, lower the enrollment as necessary
+      if (groupFlag){
+        // Check if any event exists for this event item yet.
+        let existingGroupEvent = findGroupEvent(groupCal, title, start, end);
+        // Adjust the event that was found ONLY if the current keyword is Group (else, we'll knock the event down in enrollment for every keyword it has)
+        if (existingGroupEvent != null && i == 0){
+          // If the whole group event is cancelled, adjustGroupEvent returns false. If the whole event is cancelled, then we want the full gamut of cancellation processes to run.
+          groupFlagBlocker = !adjustGroupEvent(existingGroupEvent, false);
+        }
+        // If no event was found, log it.
+        else if (i == 0) {
+          Logger.log("Group Event could not be found for title " + title);
+        }
+        
+      }
+      // If it is not a group event, proceed as normal
+      else if (!groupFlag) {
+        // If the keyword was occupancy-tagged, check the calendar for other occupancies and cancel the base-only event.
+        if (num != -1){
+          adjustOccupancy(shopCalendar, keywords[i], start, end, true);
+        }
+        // To cancel an event we must first find it on the Google Calendar.
+        let eventToModify = findEvent(shopCalendar, subtitle, start, end);
+        
+        // Try to delete the event (If multiple events or no events are found, the value will be 'null')
+        try{
+          if (eventToModify == null){
+            Logger.log("Event details are valid, but it cannot be cancelled.")
+            successFlag = false;
+          }
+
+          else{
+            eventToModify.deleteEvent();
+            Logger.log("Event \"" + subtitle + "\" Canceled");
+          }
+          
+        }
+        catch(e){
+          Logger.log("Problem canceling event. " + e.message);
+          Logger.log(body);
+          successFlag = false;
+        }
+      }
+      // If the whole Group Event was cancelled, turn off the flag for the group event and allow the other keywords to be cancelled as normal.
+      if (groupFlagBlocker){
+        groupFlag = false;
+      }
+    }
+  }
+      return successFlag;
 }
 
 
@@ -215,21 +304,21 @@ function parseEmailBody(body){
       // Used on the last line of the body
 
       Logger.log(body);
-      var lastIndex = body.length - 1;
-      var cleanup = body[lastIndex].split("|");
+      let lastIndex = body.length - 1;
+      let cleanup = body[lastIndex].split("|");
       Logger.log("Cleanup Array: " + cleanup);
-      var unsplitKeys;
-      var durationStr = cleanup[0].match(/(\d+).*/i).slice(1);
+      let unsplitKeys;
+      let durationStr = cleanup[0].match(/(\d+).*/i).slice(1);
       Logger.log("Duration Array: " + durationStr);
-      var duration = durationStr[0];
-      var keywords = [];
+      let duration = durationStr[0];
+      let keywords = [];
       if (cleanup.length > 1){
         // Remove all spaces from the keyword list
         unsplitKeys = cleanup[1].replace(/ /g, "");
         keywords = unsplitKeys.split(",");
       }
 
-      var title = body[0];
+      let title = body[0];
 
 
       Logger.log("Base Event Title: " + title);
@@ -238,30 +327,30 @@ function parseEmailBody(body){
       // We do this by using split(' ') to get an array with ["Wednesday,", "June", "4,", "2025," , "12:45pm" , "Eastern"]
       // We adjust element 4 (the time) to get rid of the meridian and replace with military time. 
       // We extract elements 1, 2, 3, and 4 to get <June 4, 2025, 13:45>. 
-      var time = body[1].split(' ');
-      var [hourMinute, meridian] = time[4].match(/(\d{1,2}:\d{2})(am|pm)/i).slice(1); // RegEx will return the original string followed by the parts separated by the expression.
+      let time = body[1].split(' ');
+      let [hourMinute, meridian] = time[4].match(/(\d{1,2}:\d{2})(am|pm)/i).slice(1); // RegEx will return the original string followed by the parts separated by the expression.
       let [hour, minute] = hourMinute.split(":").map(Number);
       if (meridian.toLowerCase() === "pm" && hour !== 12) hour += 12;
       if (meridian.toLowerCase() === "am" && hour === 12) hour = 0;
 
       // Get the month's number
-      var month = getMonthIndex(time[1]) + 1;
-      var day = time[2].slice(0,-1); // cut off the trailing comma
-      var year = time[3].slice(0,-1); // cut off the trailing comma
+      let month = getMonthIndex(time[1]) + 1;
+      let day = time[2].slice(0,-1); // cut off the trailing comma
+      let year = time[3].slice(0,-1); // cut off the trailing comma
 
 
       // Format the date according to the ISO 8601 standard
-      var dateString = year + "-" + String(month).padStart(2, '0') + "-" + day.padStart(2, '0') + 'T' + String(hour).padStart(2, '0') + ":"
+      let dateString = year + "-" + String(month).padStart(2, '0') + "-" + day.padStart(2, '0') + 'T' + String(hour).padStart(2, '0') + ":"
       + String(minute).padStart(2, "0") + ":00";
 
       // Create the Date variable (it will default to the script's timezone which can be modified in the settings tab of Apps Script.)
-      var start = new Date(dateString);
+      let start = new Date(dateString);
       // Apply the duration to get the end time.
-      var end = new Date(start.getTime());
+      let end = new Date(start.getTime());
       end.setMinutes(end.getMinutes() + parseInt(duration));
 
       // Combine all remaining description lines into one string.
-      var des = body.slice(2,lastIndex).join('\n');
+      let des = body.slice(2,lastIndex).join('\n');
 
       // Return the separated event information
       return [title, keywords, start, end, des];
@@ -272,7 +361,7 @@ function parseEmailBody(body){
 
 function createEvent(calendarId, title, startTime, endTime, description, busy) {
   // Get the calendar by ID
-  var calendar = CalendarApp.getCalendarById(calendarId);
+  let calendar = CalendarApp.getCalendarById(calendarId);
 
   if (busy){
     // Create the event
@@ -300,26 +389,297 @@ function createEvent(calendarId, title, startTime, endTime, description, busy) {
 }
 
 
+function createGroupEvent(groupEventCalendar, title, startTime, endTime, description, keys){
+  Logger.log("Creating Group Event.");
+  // Get the calendar by ID
+  let calendar = CalendarApp.getCalendarById(groupEventCalendar);
+  if(!(title in ENROLLMENT_RULES)){
+    Logger.log("Title: " + title + " is not present in the Enrollment Rules.");
+    return;
+  }
+  let eventEnrollmentRules = ENROLLMENT_RULES[title];
+  let enrollmentDetails = "1 of " + eventEnrollmentRules[2] + " spaces filled.\n";
+  let minimum = eventEnrollmentRules[1] - 1;
+  if (minimum === 1){
+    enrollmentDetails = enrollmentDetails + "1 more sign-up required to confirm.\n";
+  }
+  else{
+    enrollment_Details = enrollmentDetails + minimum + " more sign-ups required to confirm.\n";
+  }
+  
+  // Group events are supposed to have a link to the booking page at the end of the description (but before the keywords)
+  let descriptionLines = description.split("\n");
+  let base_link = descriptionLines.pop();
+  let join_link = createInstanceLink(base_link, startTime);
+  let signup_hook = "Interested in joining? Sign up here:\n" + join_link + "\n" + title + "\n";
 
+
+  
+  // Re-assemble the description now that the link is removed.
+  description = descriptionLines.join("\n");
+
+
+  
+  // Create the event
+  calendar.createEvent("Tentative: " + title, new Date(startTime), new Date(endTime), {
+      description: enrollmentDetails + signup_hook + "Tags: " + keys.join(", ") + "\n" + description,
+    });
+  
+}
+
+// Changes the details inside an existing group event. Takes a variable of that existing event and a direction (True = up, False = down) to adjust the enrollment.
+// Returns True if the event still exists after adjustment and returns False if the event gets deleted.
+function adjustGroupEvent(event, direction){
+  Logger.log("Adjusting Group Event details.");
+  Logger.log("Adjustment direction is " + direction);
+  let description = event.getDescription();
+  // Group event description in format
+  // 0 Enrollment: # out of [Maximum] spaces filled.
+  // 1 Minimum: [Minimum - #] more sign-ups required to confirm..
+  // 2 "Interested in joining? Sign up here:"
+  // 3 [Signup Link]
+  // 4 [Title]
+  // 5 Keywords: Tags: [Keywords CSV]
+  // 6+ [Description]
+
+
+  // Extract the details
+  let descriptionLines = description.split("\n");
+
+  // If the event is edited by a person, the line separator changes from \n to <br>
+  if (descriptionLines.length === 1){
+    descriptionLines = descriptionLines[0].split("<br>");
+  }
+  
+  let title = descriptionLines[4];
+  let updatedTitle = title;
+  let eventEnrollmentRules = ENROLLMENT_RULES[title];
+  Logger.log(descriptionLines);
+  let keywords = descriptionLines[5].match(/Tags: (.*)/)[1].split(", ");
+
+  // Extract the numbers from lines 0 and 1
+  let enrollment = parseInt(descriptionLines[0].match(/(\d*).*/)[1]);
+
+  // The minimum is dependent on the enrollment, so it should not be parsed directly from the text.
+  let minimum = eventEnrollmentRules[1] - enrollment;
+
+  // If direction is True, then we are gaining an enrollee
+  if (direction){
+    enrollment += 1;
+    minimum -=1;
+  }
+  // If direction is False, then we are losing an enrollee. If it's null, then we are updating occupancy for a confirmed event and do not need to adjust enrollment.
+  else if (direction !== null) {
+    enrollment -= 1;
+    minimum += 1;
+  }
+
+  let newDescription;
+
+  // if there's no direction to go (i.e. direction is 'null' then we are simply updating a confirmed event whose signup window has passed). No need to do anything fancy.
+  if (direction === null){
+    // Prevent multi_cal from returning occupancies more than once (i.e. if this function is triggered multiple times within the buffer window)
+    if (descriptionLines[descriptionLines.length - 1] === "[Locked]"){
+      Logger.log("This event has already been locked.");
+      return true;
+    }
+    Logger.log("Returning unused occupancies for event");
+    adjustGroupEventKeywords(title, event.getStartTime(), event.getEndTime(), keywords, enrollment);
+
+    // Now that we've returned any unused occupancies, update the event so that no more people can sign up and "lock" it.
+    descriptionLines[2] = "The sign-up window for this event has passed. To book another event, please use the following page:";
+    descriptionLines[3] = descriptionLines[3].match(/(.*)\d{4}-\d{2}-\d{2}.*/)[1];
+    descriptionLines.push("[Locked]");
+    newDescription = descriptionLines.join("\n");
+    event.setDescription(newDescription);
+    
+    return true;
+  }
+  // If direction was not null, let's update all the event details!
+  else{
+    descriptionLines[0] = enrollment + " of " + eventEnrollmentRules[2] + " spaces filled.";
+    // If there is no minimum number of enrollees left to confirm, change the event title to Confirmed + Title
+    if (minimum <= 0){
+      descriptionLines[1] = "0 more signups required! The minimum enrollment has been met for this meeting.";
+      updatedTitle = "Confirmed: " + title;
+    }
+    // If the minimum number of enrollees hasn't been met yet, keep the title as Tentative and show the number needed for confirmation.
+    else if (minimum > 0){
+      if (minimum === 1){
+        descriptionLines[1] = "1 more sign-up required to confirm.";
+      }
+      else{
+        descriptionLines[1] = minimum + " more sign-ups required to confirm.";
+      }
+      
+      updatedTitle = "Tentative: " + title;
+    }
+    
+    // If the event is full or seems like it might be overbooked, mark it as full and replace the instance-specific signup link with the general booking page.
+    if (enrollment >= eventEnrollmentRules[2]){
+      descriptionLines[2] = "This event is full! If you need to schedule a training, please book a new training slot using the following link.";
+      descriptionLines[3] = descriptionLines[3].match(/(.*)\d{4}-\d{2}-\d{2}.*/)[1];
+      updatedTitle = "Full: " + title;
+    }
+
+    // If the event WAS full but has since been reduced, return the instance-specific signup link and invitation message.
+    else if(enrollment == eventEnrollmentRules[2] - 1 && !direction){
+      descriptionLines[2] = "Interested in joining? Sign up here:";
+      descriptionLines[3] = createInstanceLink(descriptionLines[3], event.getStartTime());
+    }
+
+    // If nobody is left enrolled in the event, delete it.
+    else if(enrollment == 0){
+      adjustGroupEventKeywords(title, event.getStartTime(), event.getEndTime(), keywords, enrollment);
+      event.deleteEvent();
+      // If the event gets deleted, return False
+      return false;
+    }
+    Logger.log("Changing Group Event details to match enrollment.");
+    newDescription = descriptionLines.join("\n");
+    Logger.log("New details are:\n" + newDescription);
+    event.setTitle(updatedTitle);
+    event.setDescription(newDescription);
+    // If the event still exists after all that, return True
+    return true;
+  }
+  
+}
+
+
+function adjustGroupEventKeywords(title, start, end, keywords, enrollment){
+  // If Enrollment is 0, fully cancel all keyword reservations and return full occupancy reservations.
+  // If Enrollment is greater than 0, use ENROLLMENT_RULES to determine how many slots to give back to occupancy-based keywords.
+  if (enrollment == 0){
+    // If the enrollment drops to 0, go through the full cancellation process for the keywords.
+    adjustSchedule(title, "CAN", keywords, start, end, "");
+  }
+  else{
+    let enrollmentDifference = ENROLLMENT_RULES[title][2] - enrollment;
+    Logger.log("Maximum occupancy to be returned is " + enrollmentDifference);
+    // If enrollment is nonzero, check for occupancy-based keywords and for each of those keywords, add the occupancy back on that has not been signed away.
+    for(i = 0; i < keywords.length; i++){
+      let [base, num] = separateOccupancy(keywords[i]);
+      // If it's an occupancy keyword and the enrollment no longer encompasses everything (some events may have fewer resources than people and they just take turns, for instance), return the appropriate amount of slots.
+      if (num != -1 && enrollment < OCCUPANCY_RULES[base]){
+        // We're going to "Cancel" the adjusted value which means adding back in the availability for whatever the difference is between the max occupancy (which was reserved) and the actual enrollment
+        
+        // First find the relevant calendar for the keyword.
+        let keywordCal = base;
+        while (keywordCal in KEYWORD_TREE){
+          keywordCal = KEYWORD_TREE[keywordCal];
+        }
+        while (keywordCal in CALENDAR_TREE){
+          keywordCal = CALENDAR_TREE[keywordCal];
+        }
+
+        // Next, find the occupancy spaces that can be returned. 
+        let occupancyReturn = Math.min(enrollmentDifference, OCCUPANCY_RULES[base]);
+        Logger.log("Returning " + occupancyReturn + " to " + base);
+        adjustOccupancy(keywordCal, base + "[" + occupancyReturn + "]", start, end, true);
+      }
+    }
+  }
+}
+
+// Checks that events meet minimum enrollment ahead of the event according to the provided time-window length. Runs on a trigger every 15 minutes.
+function checkEnrollments(){
+  // Checks enrollment of group events using the keys from the ENROLLMENT_RULES constant. 
+  // Calls the keyword adjuster whenever there is an event whose time is finished.
+  Logger.log("Checking for sub-minimum Group Events.");
+  titles = Object.keys(ENROLLMENT_RULES);
+  
+  for (let i = 0; i < titles.length; i++){
+    // Find the relevant calendar for each title.
+    let enrolledCalendar = titles[i];
+    while (enrolledCalendar in CALENDAR_TREE){
+      enrolledCalendar = CALENDAR_TREE[enrolledCalendar];
+    }
+    // Find the enrollment details for each title
+    eventBuffer = ENROLLMENT_RULES[titles[i]][0];
+
+    // Search for tentative events with the same title
+    let eventTitle = "Tentative: " + titles[i];
+    let events = findUpcomingGroupEvent(enrolledCalendar, eventTitle);
+    Logger.log("Found " + events.length + " events to cancel.");
+    for (let j = 0; j < events.length; j++){
+      // Find the edge of the buffer time for each event
+      let bufferTime = events[j].getStartTime();
+      bufferTime.setMinutes(bufferTime.getMinutes() - eventBuffer);
+      let currentTime = new Date(Date.now());
+
+      // Check the buffer time against the current time. If the current time is later than the edge of the buffer window, the sign-up time has passed, so we can cancel.
+      if (bufferTime < currentTime){
+        // Create a placeholder event that says "Cancelled: Title" that is set to Free with the same timing.
+        createEvent(enrolledCalendar, titles[i], events[j].getStartTime(), events[j].getEndTime(), "", false);
+
+        // Remove the original event
+        Logger.log("Event " + events[j].getTitle() + " does not meet its enrollment minimum. It is now being cancelled.");
+        let cancelled = false;
+        // Reduce the enrollment person by person until the event is cancelled.
+        while (!cancelled){
+          cancelled = !adjustGroupEvent(events[j], false);
+        }
+      }
+    }
+
+    // Search for confirmed events with the same title
+    eventTitle = "Confirmed: " + titles[i];
+    events = findUpcomingGroupEvent(enrolledCalendar, eventTitle);
+    Logger.log("Found " + events.length + " events to update occupancy for.");
+    for (let j = 0; j < events.length; j++){
+      // Find the edge of the buffer time for each event
+      let bufferTime = events[j].getStartTime();
+      bufferTime.setMinutes(bufferTime.getMinutes() - eventBuffer);
+      let currentTime = new Date(Date.now());
+      // Check the buffer time against the current time. If the current time is later than the edge of the buffer window, the sign-up time has passed, so we can cancel.
+      
+      if (bufferTime < currentTime){
+        Logger.log("Event " + events[j].getTitle() + " has met its enrollment minimum but is not full. Any occupancies will be updated accordingly.");
+        adjustGroupEvent(events[j], null);
+      }
+    }
+  }
+}
+
+
+// Searches within the GROUP_EVENT_LOOKAHEAD time range for any events of a given title and returns them.
+function findUpcomingGroupEvent(calendarID, title){
+  // Get the calendar by ID
+  let calendar = CalendarApp.getCalendarById(calendarID);
+  // Find the start of our search range.
+  let startRange = new Date(Date.now());
+  // Add a reverse-buffer of 60 minutes in case we are within a cancellation range. This means this function should be triggered MORE OFTEN than once per hour.
+  startRange.setMinutes(startRange.getMinutes() - 60);
+  let endRange = new Date(startRange.getTime());
+  endRange.setMinutes(endRange.getMinutes() + GROUP_EVENT_LOOKAHEAD);
+  // Find all events in the time range
+  let events = calendar.getEvents(startRange, endRange);
+
+  // Return any events in the time range that match the title
+  return events.filter(event => (event.getTitle().trim() === title.trim()));
+}
+
+// findEvent gets any events with matching information but only returns the first match--if there are any--and returns null if there are no matches.
 function findEvent(calendarId, title, startTime, endTime){
   // Get the calendar by ID
-  var calendar = CalendarApp.getCalendarById(calendarId);
+  let calendar = CalendarApp.getCalendarById(calendarId);
 
-  var start = new Date(startTime.getTime());
-  var end = new Date(endTime.getTime());
+  let start = new Date(startTime.getTime());
+  let end = new Date(endTime.getTime());
 
   // Add a 5 minute buffer to the start and end time
   start.setMinutes(start.getMinutes() - 5);
   end.setMinutes(end.getMinutes() + 5);
 
   // Find all events in the time range
-  var events = calendar.getEvents(start, end);
+  let events = calendar.getEvents(start, end);
 
   // Find any events in the time range that match the title and timing exactly
   toModify = events.filter(event => (event.getTitle().trim() === title.trim() && event.getStartTime().getTime() === startTime.getTime() && event.getEndTime().getTime() === endTime.getTime()));
 
   // Find how many events match. If it's just one, return the event, if it is more, return nothing.
-  var numEvents = toModify.length;
+  let numEvents = toModify.length;
   if (numEvents == 1){
     return toModify[0];
   }
@@ -329,18 +689,31 @@ function findEvent(calendarId, title, startTime, endTime){
   }
 
   else{
-    Logger.log("Multiple matching events foundfor title \"" + title + "\"\nReturning the first match.");
+    Logger.log("Multiple matching events found for title \"" + title + "\"\nReturning the first match.");
     return toModify[0];
   }
 
 }
 
-
+// findGroupEvent works almost the same as the findEvent function but searches for the three different versions for a particular title that may exist. It prioritizes under-filled events.
+function findGroupEvent(calendarID, title, start, end){
+  let groupEvent = null;
+  for(let i = 0; i < 3; i++){
+    // Use the Find Events function to look for an existing entry
+    groupEvent = findEvent(calendarID, GROUP_EVENT_PREFIXES[i] + title, start, end);
+    // If groupEvents returns "null" it means nothing was found. If groupEvents is NOT null, then there is an event already on the calendar for this item.
+    if (groupEvent != null){
+      // return the event that was found so it can be used later.
+      return groupEvent;
+    }
+  }
+  return groupEvent;
+}
 
 // For occupancy-notation keywords, we need to be able to separate the occupancy info from the base of the keyword. This function does that and returns the base and a number.
 function separateOccupancy(keyword){
   // Find the occupancy usage of the keyword supplied from format {any number of characters} {opening square bracket} {1 or more digits} {closing square bracket}
-  var extraction = keyword.match(/^(.*)\[(\d+)\]$/);
+  let extraction = keyword.match(/^(.*)\[(\d+)\]$/);
   
   // If there was nothing to extract, return the normal keyword and negative 1 (an impossible occupancy number)
   if (!extraction){
@@ -354,11 +727,12 @@ function separateOccupancy(keyword){
 
 
 // CalendarId is a string, keyword is a string, startTime and endTime are Date objects, cancellation is a boolean value {true: this event is being cancelled, false: this event is being created}
+// group Boolean represents whether it is a group event. If it IS, then we only adjust occupancy for it once when it is first made (this reserves the space for the max enrollment of the event) and only when it is fully cancelled or when signup stops does the occupancy get reset or adjusted down to reflect enrollment.
 function adjustOccupancy(calendarId, keyword, startTime, endTime, cancellation){
 
-  var calendar = CalendarApp.getCalendarById(calendarId);
+  let calendar = CalendarApp.getCalendarById(calendarId);
   
-  var [base, num] = separateOccupancy(keyword);
+  let [base, num] = separateOccupancy(keyword);
   // Make absolutely certain that there are no leading/trailing spaces
   base = base.trim();
   Logger.log("Keyword Base is: \"" + base + "\"");
@@ -382,12 +756,12 @@ function adjustOccupancy(calendarId, keyword, startTime, endTime, cancellation){
   dayEnd = new Date(endTime);
   dayEnd.setHours(23,59,59,999);
   
-  var events = calendar.getEvents(dayStart, dayEnd);
+  let events = calendar.getEvents(dayStart, dayEnd);
 
   // Get all events that overlap with the event being scheduled and which include the keyword in question
   events = events.filter(event => (event.getStartTime() < endTime.getTime() && event.getEndTime() > startTime.getTime() && event.getTitle().includes(base + "[")));
   
-  var remaining = OCCUPANCY_RULES[base] - num;
+  let remaining = OCCUPANCY_RULES[base] - num;
 
   if (events.length == 0){
     // If this is a cancellation and there are no events to cancel, escape
@@ -395,7 +769,7 @@ function adjustOccupancy(calendarId, keyword, startTime, endTime, cancellation){
       return null;
     }
     // If no events are found and we are not cancelling an event, create an event!
-    var newEvent = calendar.createEvent(enumerateKeyword(base, remaining), startTime, endTime, {description: remaining})
+    let newEvent = calendar.createEvent(enumerateKeyword(base, remaining), startTime, endTime, {description: remaining})
     if (newEvent.getStartTime().getTime() === newEvent.getEndTime().getTime()){
       newEvent.deleteEvent();
     }
@@ -406,12 +780,12 @@ function adjustOccupancy(calendarId, keyword, startTime, endTime, cancellation){
   if (cancellation){
     num = -num;
   }
-  var early = false;
-  var late = false;
-  var splitEvents = [];
+  let early = false;
+  let late = false;
+  let splitEvents = [];
 
   // Check against the first conflicting event (we do not loop because we will be doing recursion :) )
-  var event = events[0];
+  let event = events[0];
   [splitEvents, early, late] = splitEvent(event, startTime, endTime, calendarId);
   // If the existing event contains the new event, we adjust available occupancy in the existing event's middle third.
   if (early && late){
@@ -438,7 +812,7 @@ function adjustOccupancy(calendarId, keyword, startTime, endTime, cancellation){
 
 
 function shiftEvent(event, base, num){
-  var count = parseInt(event.getDescription(), 10);
+  let count = parseInt(event.getDescription(), 10);
   count = count - num;
   // Make sure that no error can make it seem like more space is available than truly exists. If a cancellation would empty the space, shop, or resource, delete the reservation notes for that time.
   if (count >= OCCUPANCY_RULES[base]){
@@ -460,7 +834,7 @@ function shiftEvent(event, base, num){
 // Creates a long string enumerating the number of available spaces. This must be done this way to be compatible with Calendly's exception rules.
 function enumerateKeyword(base, remaining){
 
-  var concatString = base + "[" + remaining + "]";
+  let concatString = base + "[" + remaining + "]";
   // return adjusted keyword
   for (let i = 1; i < remaining; i++){
     concatString = concatString + ", " + base + "[" + (remaining - i) + "]";
@@ -474,12 +848,12 @@ function enumerateKeyword(base, remaining){
 // Splits an event using the start and end time given, uses the same name/description for each.
 function splitEvent(event, start, end, calendarId){
 
-  var split1 = false;
-  var split2 = false;
+  let split1 = false;
+  let split2 = false;
 
-  var calendar = CalendarApp.getCalendarById(calendarId);
+  let calendar = CalendarApp.getCalendarById(calendarId);
 
-  var events = [event];
+  let events = [event];
   //Logger.log("Event Details:\n" + event.getTitle() + "\n" + event.getStartTime() + "\n" + event.getEndTime() + "\n");
 
   //Logger.log("Split Details:\n" + start + "\n" + end + "\n");
@@ -529,7 +903,20 @@ function splitEvent(event, start, end, calendarId){
   return [events, split1, split2];
 }
 
+// This function creates a link to an event instance using the event type's booking page and the time information. The resulting link should look like the following:
+// https://calendly.com/user/eventName/2001-01-01T12:00:00
+function createInstanceLink(bookingPage, startTime){
+  // Use the booking page link as a base
+  let instanceLink = bookingPage;
+  // If there isn't a slash at the end of the booking page link, add one
+  if (instanceLink[instanceLink.length - 1] != "/"){
+    instanceLink = instanceLink + "/";
+  }
+  // Convert the Date/Time into the YYYY-MM-DD and HH:MM:SS formats
+  startString = startTime.toISOString();
 
+  return instanceLink + startString.slice(0, startString.length - 5) + "Z";
+}
 
 
 // This function takes the HTML body of the email and scrapes out the event information from it.
@@ -550,8 +937,8 @@ function htmlDeleter(html){
   bodyList = bodyList.filter(str => str !== ""); // Remove all empty strings
   
   
-  var bodyLength = bodyList.length;
-  var sliceIndex = bodyLength;
+  let bodyLength = bodyList.length;
+  let sliceIndex = bodyLength;
   for(let i = 0; i<bodyLength; i++){
     // We go backwards through the list of lines to find the one with the duration and keywords. It is formatted "<Duration> | <Keywords>" so we just need to look for the vertical bar.
     if (bodyList[bodyLength - 1 - i].includes("|")) {
