@@ -52,6 +52,8 @@ const CALENDAR_TREE = {
   "Category_1" : "<<INSERT CAL_ID FOR CATEGORY_1>>",
   "Category_2" : "<<INSERT CAL_ID FOR CATEGORY_2>>",
   "Category_3" : "<<INSERT CAL_ID FOR CATEGORY_3>>",
+  "Category_4" : "<<INSERT CAL_ID FOR CATEGORY_4>>",
+  "Category_5" : "<<INSERT CAL_ID FOR CATEGORY_5>>",
 }
 
 // These are the three prefixes used on Group/Enrollment based events. They do not need to change.
@@ -183,7 +185,12 @@ function adjustSchedule(title, subject, keywords, start, end, des){
     // Get the calendar for the keyword and check if the keyword is a subset of a larger keyword. If so, add the parent keyword(s) to the title.
     let keyParents = [];
     [shopCalendar, keyParents] = getCalendar(base, title);
-    subtitle = subtitle + ", " + keyParents.join(", ");
+
+    // If there are parent keywords, add them to the subtitle.
+    if (keyParents.length > 0){
+      subtitle = subtitle + ", " + keyParents.join(", ");
+    }
+    
     if (shopCalendar === null){
       Logger.log("No calendar found for keyword \"" + base + "\".");
       continue;
