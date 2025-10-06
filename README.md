@@ -6,7 +6,7 @@ multi_cal enables users to schedule events via Calendly that reserve specific sh
 The multi_cal codebase should be readable enough that it explains itself. In this ReadMe, we will go over the steps to setting up multi_cal with a Google account and creating the communication link to your Calendly account.
 
 # Google Apps Script
-For multi_cal to work, it needs to be hosted on a dedicated email account. Either select an existing account or create a new one (it will need to have access to the full Google Suite), then navigate to Google Apps Script. Once there, you need to create a new project (you can name it whatever you like) and paste the multi_cal.js code into the editor. Once that is done, you will need to change the three dictionaries (OCCUPANCY_RULES, KEYWORD_TREE, and CALENDAR_TREE) to reflect your setup/purposes.
+For multi_cal to work, it needs to be hosted on a dedicated email account. Either select an existing account or create a new one (it will need to have access to the full Google Suite), then navigate to Google Apps Script. Once there, you need to create a new project (you can name it whatever you like) and paste the multi_cal.js code into the editor. Once that is done, you will need to change the four dictionaries (OCCUPANCY_RULES, ENROLLMENT_RULES, KEYWORD_TREE, and CALENDAR_TREE) to reflect your setup/purposes.
 
 
 # Structure Overview
