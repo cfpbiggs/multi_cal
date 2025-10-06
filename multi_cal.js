@@ -112,7 +112,7 @@ function readEmail() {
           Logger.log(body);
           continue
         }
-
+        title = title.replace("&amp;", "&");
         // Use the extracted details to add or remove the event from the schedule and record whether the message ought to be deleted.
         let deleteFlag = adjustSchedule(title, subject, keywords, start, end, des);
         
@@ -157,9 +157,13 @@ function adjustSchedule(title, subject, keywords, start, end, des){
   
   Logger.log("Group Flag is " + groupFlag);
 
-  let groupCal = title;
-  while (groupCal in CALENDAR_TREE){
-    groupCal = CALENDAR_TREE[groupCal];
+  // Because we are passing a title by default, no secondary title parameter is needed.
+  let groupCal = getCalendar(title, "")[0];
+
+  // If the getCalendar function returned null for the title on a group event, then we have no calendar for this title and should skip it. 
+  if (groupCal === null && groupFlag){
+    Logger.log("No calendar found for group event \"" + title + "\".")
+    return false;
   }
   // This flag is non-blocking (i.e. defaults to True) unless the event is actually a group event and there is an existing entry for it. It must only be reset outside of the keyword loop.
   let newGroupEvent = true;
@@ -176,26 +180,20 @@ function adjustSchedule(title, subject, keywords, start, end, des){
     // The subtitle for the event should be the title plus what resource is being used.
     subtitle = title + " Using: " + base;
 
-    // Check if the keyword is a subset of a larger keyword. If so, add the superset keyword to the title.
-    while(base in KEYWORD_TREE){
-      let parent = KEYWORD_TREE[base];
-      // add the superset to the title
-      subtitle = subtitle + ", " + parent;
-      // set base to parent in case the superset is, itself, a subset of another keyword. If it isn't, the loop will break.
-      base = parent;
+    // Get the calendar for the keyword and check if the keyword is a subset of a larger keyword. If so, add the parent keyword(s) to the title.
+    let keyParents = [];
+    [shopCalendar, keyParents] = getCalendar(base, title);
+    subtitle = subtitle + ", " + keyParents.join(", ");
+    if (shopCalendar === null){
+      Logger.log("No calendar found for keyword \"" + base + "\".");
+      continue;
     }
-    // Find the relevant shop calendar for the keyword using the new base using the same method as before
-    while(base in CALENDAR_TREE){
-      let parent = CALENDAR_TREE[base];
-      // Set base to parent so that the loop can run again if the parent is the category rather than the calendar ID. If it is the calendar ID, the loop will break.
-      base = parent;
-    }
-    shopCalendar = base;
+
 
     // Create an event for this keyword if the email is about scheduling.
     if (subject === "NEW"){
       let existingGroupEvent;
-      if (i == 0){
+      if (i == 0 & groupFlag){
         // Check if any event exists for this event item yet but only if we're on the first
         existingGroupEvent = findGroupEvent(groupCal, title, start, end);
         // If there is an existing event, this is not new!
@@ -394,20 +392,26 @@ function createGroupEvent(groupEventCalendar, title, startTime, endTime, descrip
   Logger.log("Creating Group Event.");
   // Get the calendar by ID
   let calendar = CalendarApp.getCalendarById(groupEventCalendar);
+  
+  // If there is no enrollment data, do not proceed.
   if(!(title in ENROLLMENT_RULES)){
-    Logger.log("Title: " + title + " is not present in the Enrollment Rules.");
+    Logger.log("Title: " + title + " is not present in the Enrollment Rules Dictionary.");
     return;
   }
+
   let eventEnrollmentRules = ENROLLMENT_RULES[title];
   let enrollmentDetails = "1 of " + eventEnrollmentRules[2] + " spaces filled.\n";
+
   let minimum = eventEnrollmentRules[1] - 1;
+
+  // This line was being skipped for some events. Not certain why. It has been reformatted so that it is guaranteed to be run at least in part.
+  let minString = minimum + " more sign-ups required to confirm.\n";
   if (minimum === 1){
-    enrollmentDetails = enrollmentDetails + "1 more sign-up required to confirm.\n";
-  }
-  else{
-    enrollment_Details = enrollmentDetails + minimum + " more sign-ups required to confirm.\n";
+    minString = "1 more sign-up required to confirm.\n";
   }
   
+  enrollmentDetails = enrollmentDetails + minString;
+
   // Group events are supposed to have a link to the booking page at the end of the description (but before the keywords)
   let descriptionLines = description.split("\n");
   let baseLink = descriptionLines.pop();
@@ -425,8 +429,6 @@ function createGroupEvent(groupEventCalendar, title, startTime, endTime, descrip
   // Re-assemble the description now that the link is removed.
   description = descriptionLines.join("\n");
 
-
-  
   // Create the event
   calendar.createEvent(newTitle, new Date(startTime), new Date(endTime), {
       description: enrollmentDetails + signupHook + "Tags: " + keys.join(", ") + "\n" + description,
@@ -573,12 +575,10 @@ function adjustGroupEventKeywords(title, start, end, keywords, enrollment){
         // We're going to "Cancel" the adjusted value which means adding back in the availability for whatever the difference is between the max occupancy (which was reserved) and the actual enrollment
         
         // First find the relevant calendar for the keyword.
-        let keywordCal = base;
-        while (keywordCal in KEYWORD_TREE){
-          keywordCal = KEYWORD_TREE[keywordCal];
-        }
-        while (keywordCal in CALENDAR_TREE){
-          keywordCal = CALENDAR_TREE[keywordCal];
+        let keywordCal = getCalendar(base, title)[0];
+        if (keywordCal === null){
+          Logger.log("No calendar found for keyword \"" + base + "\".")
+          continue;
         }
 
         // Next, find the occupancy spaces that can be returned. 
@@ -598,10 +598,11 @@ function checkEnrollments(){
   titles = Object.keys(ENROLLMENT_RULES);
   
   for (let i = 0; i < titles.length; i++){
-    // Find the relevant calendar for each title.
-    let enrolledCalendar = titles[i];
-    while (enrolledCalendar in CALENDAR_TREE){
-      enrolledCalendar = CALENDAR_TREE[enrolledCalendar];
+    // Find the relevant group calendar for each title. Because we are passing titles directly, we do not need to give a secondary title string.
+    let enrolledCalendar = getCalendar(titles[i], "")[0];
+    if (enrolledCalendar === null){
+      Logger.log("No calendar found for entry \"" + titles[i] + "\".");
+      continue;
     }
     // Find the enrollment details for each title
     eventBuffer = ENROLLMENT_RULES[titles[i]][0];
@@ -743,7 +744,6 @@ function adjustOccupancy(calendarId, keyword, startTime, endTime, cancellation){
   let [base, num] = separateOccupancy(keyword);
   // Make absolutely certain that there are no leading/trailing spaces
   base = base.trim();
-  Logger.log("Keyword Base is: \"" + base + "\"");
 
   // Check that we actually have an occupancy entry for that base keyword.
   // If not, return the keyword as it was.
@@ -757,7 +757,7 @@ function adjustOccupancy(calendarId, keyword, startTime, endTime, cancellation){
     return null;
   }
 
-  Logger.log("Checking occupancy from: " + startTime.getTime() + " to: " + endTime.getTime());
+  Logger.log("Checking occupancy for " + base);
   // Get all events for that day
   dayStart = new Date(startTime);
   dayStart.setHours(0,0,0,0);
@@ -966,4 +966,28 @@ function getMonthIndex(monthName) {
     "july", "august", "september", "october", "november", "december"
   ];
   return months.indexOf(monthName.toLowerCase());
+}
+
+// Takes a keyword or event name and finds the calendar ID.
+function getCalendar(keyword, title){
+  let calID = keyword;
+  // if the keyword is "group" then we need to check the calendar tree using the TITLE of the event.
+  if(keyword.toUpperCase() === "GROUP"){
+    calID = title;
+  }
+  let superKeys = [];
+  while(calID in KEYWORD_TREE){
+    superKeys.push(KEYWORD_TREE[calID]);
+    calID = KEYWORD_TREE[calID];
+  }
+  while (calID in CALENDAR_TREE){
+    calID = CALENDAR_TREE[calID];
+  }
+
+  // Return null if no calendar was found for the entry. All calendar IDs start with "c_"
+  if(calID.substring(0,2) != "c_"){
+    calID = null;
+  }
+
+  return [calID, superKeys];
 }
