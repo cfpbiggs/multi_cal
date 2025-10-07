@@ -67,7 +67,7 @@ function readEmail() {
   // We want to only check for unread Calendly emails, this will save compute time and prevent acknowledging spam.
   let senderEmail = 'no-reply@calendly.com';
   let threads = GmailApp.search('from:' + senderEmail + ' is:unread');  // Search for unread messages from the specific sender
-  let shopCalendar = ""; // This where the ID of the calendar is stored once an event needs to be scheduled
+  
 
   Logger.log("Checking Messages.");
 
@@ -75,10 +75,6 @@ function readEmail() {
   for (let j = 0; j < threads.length; j++){
     // For each thread, we get a list of messages within that thread (a thread is a list of messages with the same subject line)
     let messages = threads[j].getMessages();
-
-    // Keep our messages in buckets until we are done looping and can clear them away.
-    let deleteMessages = [];
-    let readMessages = [];
     // Check every message in the thread
     for (let k = 0; k < messages.length; k++){
 
@@ -120,13 +116,11 @@ function readEmail() {
         
         // Delete the email after logging the output if everything ran correctly
         if (deleteFlag){
-          deleteMessages.push(message);
           message.moveToTrash();
           Logger.log("Message Deleted.")
         }
         // If the deleteFlag was turned off, mark message read instead of deleting.
         else{
-          readMessages.push(message);
           message.markRead();
           Logger.log("Message Read")
         }
@@ -138,6 +132,8 @@ function readEmail() {
 
 // Takes in event details and performs the necessary scheduling actions. Returns a flag to indicate the success of the operation.
 function adjustSchedule(title, subject, keywords, start, end, des){
+  // This where the ID of the calendar is stored once an event needs to be scheduled
+  let shopCalendar = "";
   // Keep track of the adjusted titles used for different events
   let subtitle;
   // This flag keeps track of whether all processes completed successfully.
@@ -200,7 +196,7 @@ function adjustSchedule(title, subject, keywords, start, end, des){
     // Create an event for this keyword if the email is about scheduling.
     if (subject === "NEW"){
       let existingGroupEvent;
-      if (i == 0 & groupFlag){
+      if (i == 0 && groupFlag){
         // Check if any event exists for this event item yet but only if we're on the first
         existingGroupEvent = findGroupEvent(groupCal, title, start, end);
         // If there is an existing event, this is not new!
