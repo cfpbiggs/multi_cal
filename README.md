@@ -134,9 +134,9 @@ This does not interfere with the normal system, as because TAG[X] includes TAG, 
 
 # The Enrollment Feature (Optional)
 ## Overview:
-The Occupancy Feature and most other features of this setup do not account for group events. The idea is that group events can be scheduled inherently by checking if there is space and staff available through the occupancy feature. But what if you want to eliminate any meetings with a single student? To ensure a minimum number of students are enrolled in a training (and to display the available slots to the students), users must employ this Enrollment Feature.
+The Occupancy Feature and most other features of this setup do not account for group events. The idea is that group events can be scheduled inherently by checking if there is space and staff available through the occupancy feature. But what if you want to eliminate any meetings with a single user? To ensure a minimum number of users are enrolled in a training (and to display the available slots to the users), users must employ this Enrollment Feature.
 
-The Enrollment Feature works very similarly to the Occupancy Feature however, instead of working with one-on-one events and keywords, the Enrollment Feature works with group events in Calendly and requires no additional sharing keywords like the Occupancy Feature does (unless you are trying to use the Occupancy Feature in tandem with this one). The Enrollment Feature adds a link with the appropriate event and timestamp information embedded to the shared events so that students can add themselves onto the events simply by checking the calendar and following that link. The link is removed once maximum occupancy is reached.
+The Enrollment Feature works very similarly to the Occupancy Feature however, instead of working with one-on-one events and keywords, the Enrollment Feature works with group events in Calendly and requires no additional sharing keywords like the Occupancy Feature does (unless you are trying to use the Occupancy Feature in tandem with this one). The Enrollment Feature adds a link with the appropriate event and timestamp information embedded to the shared events so that users can add themselves onto the events simply by checking the calendar and following that link. The link is removed once maximum occupancy is reached.
 
 The title of these events reflect whether the event is full, available, or still tentative. If not enough people have signed up yet, it remains “Tentative.” Then it moves to “Confirmed.” Then, once all spots are filled, it moves to “Full.”
 
@@ -175,7 +175,7 @@ As mentioned in the overview, the ENROLLMENT_RULES dictionary tells the script w
 The event title will need to be put into the CALENDAR_TREE dictionary as well as though it were a keyword. The event title should work be the key and that key should be associated with whichever user-facing calendar group is most relevant.
 
 ## Calendar Interface:
-The calendar that Group Events are placed on should be separate from the keyword/occupancy calendars so that the calendar may be shared with students directly. This public-facing calendar allows students to join existing slots in order to more efficiently meet minimums.
+The calendar that Group Events are placed on should be separate from the keyword/occupancy calendars so that the calendar may be shared with users directly. This public-facing calendar allows users to join existing slots in order to more efficiently meet minimums.
 
 Users can use a link on the event to sign up for that same time-slot until the event is full. If the sign-up window has elapsed, then the event will either be cancelled (if it did not meet the minimum enrollment) or it will remain confirmed but the join link will be removed.
 
