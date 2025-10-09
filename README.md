@@ -172,14 +172,14 @@ On the hosting account, update the ENROLLMENT_RULES dictionary and the CALENDAR_
 
 As mentioned in the overview, the ENROLLMENT_RULES dictionary tells the script when to stop accepting updates to the event, what the minimum enrollment is, and what the maximum enrollment is. This allows the script to keep track of how to title events according to the current enrollment numbers.
 
-The event title will need to be put into the CALENDAR_TREE dictionary as well as though it were a keyword. The event title should work be the key and that key should be associated with whichever user-facing calendar group is most relevant.
+The event title will need to be put into the CALENDAR_TREE dictionary as though it were a keyword. The event title is then associated with whichever user-facing calendar group is most relevant. Be careful of special characters as some values are converted into HTML placeholders during the translation process. Currently, handling is built-in for Ampersands (& vs \&amp;) but no other handling is built in yet.
 
 ## Calendar Interface:
 The calendar that Group Events are placed on should be separate from the keyword/occupancy calendars so that the calendar may be shared with users directly. This public-facing calendar allows users to join existing slots in order to more efficiently meet minimums.
 
 Users can use a link on the event to sign up for that same time-slot until the event is full. If the sign-up window has elapsed, then the event will either be cancelled (if it did not meet the minimum enrollment) or it will remain confirmed but the join link will be removed.
 
-When an event is cancelled, a placeholder event is kept on the calendar to show users that the event at that timew as cancelled. The "Cancelled" event will no longer have a signup description, but it will still include the event name in the title. The event will also be set to “Free” to prevent it from showing up as busy elsewhere. 
+When an event is cancelled, a placeholder event is kept on the calendar to show users that the event at that time was cancelled. The "Cancelled" event will no longer have a signup description, but it will still include the event name in the title. The event will also be set to “Free” to prevent it from showing up as busy elsewhere. 
 
 **Note:** This script *does not send email updates.* In order to do so, it would need to collect personal information from Calendly, and that would require more security features to be implemented than I can provide. Users should be instructed to keep track of the public calendar and to use the calendar to verify whether their events are confirmed or not.
 
