@@ -66,15 +66,14 @@ function readEmail() {
 
   // We want to only check for unread Calendly emails, this will save compute time and prevent acknowledging spam.
   let senderEmail = 'no-reply@calendly.com';
-  let threads = GmailApp.search('from:' + senderEmail + ' is:unread');  // Search for unread messages from the specific sender
-  
-
+  let threads = GmailApp.search('from:' + senderEmail + ' is:unread');  // Search for unread messages from the specific sender  
   Logger.log("Checking Messages.");
 
   // Once we have our list of threads to read, we go through all of them
   for (let j = 0; j < threads.length; j++){
     // For each thread, we get a list of messages within that thread (a thread is a list of messages with the same subject line)
     let messages = threads[j].getMessages();
+
     // Check every message in the thread
     for (let k = 0; k < messages.length; k++){
 
@@ -110,6 +109,8 @@ function readEmail() {
           Logger.log(body);
           continue
         }
+
+        // Replace HTML notation with actual ampersand
         title = title.replace("&amp;", "&");
         // Use the extracted details to add or remove the event from the schedule and record whether the message ought to be deleted.
         let deleteFlag = adjustSchedule(title, subject, keywords, start, end, des);
@@ -133,7 +134,7 @@ function readEmail() {
 // Takes in event details and performs the necessary scheduling actions. Returns a flag to indicate the success of the operation.
 function adjustSchedule(title, subject, keywords, start, end, des){
   // This where the ID of the calendar is stored once an event needs to be scheduled
-  let shopCalendar = "";
+  let shopCalendar = ""; 
   // Keep track of the adjusted titles used for different events
   let subtitle;
   // This flag keeps track of whether all processes completed successfully.
@@ -181,12 +182,10 @@ function adjustSchedule(title, subject, keywords, start, end, des){
     // Get the calendar for the keyword and check if the keyword is a subset of a larger keyword. If so, add the parent keyword(s) to the title.
     let keyParents = [];
     [shopCalendar, keyParents] = getCalendar(base, title);
-
-    // If there are parent keywords, add them to the subtitle.
+    // If there are any parent keywords, add them to the subtitle
     if (keyParents.length > 0){
       subtitle = subtitle + ", " + keyParents.join(", ");
     }
-    
     if (shopCalendar === null){
       Logger.log("No calendar found for keyword \"" + base + "\".");
       continue;
@@ -197,9 +196,9 @@ function adjustSchedule(title, subject, keywords, start, end, des){
     if (subject === "NEW"){
       let existingGroupEvent;
       if (i == 0 && groupFlag){
-        // Check if any event exists for this event item yet but only if we're on the first
+        // Check if any event exists for this event item yet but only if we're on the first keyword
         existingGroupEvent = findGroupEvent(groupCal, title, start, end);
-        // If there is an existing event, this is not new!
+        // If there is an existing event, this is not new. The newGroupEvent flag will then persist as false for all subsequent keywords on this event.
         if (existingGroupEvent != null){
           newGroupEvent = false;
         }
