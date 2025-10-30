@@ -61,6 +61,7 @@ const GROUP_EVENT_PREFIXES = ["Tentative: ", "Confirmed: ", "Full: "];
 // This is the amount of time our automatic group event-checker will look ahead for events in need of cancelling. The longer it is, the longer the checker will take to run. 10080 is 1 week in minutes.
 const GROUP_EVENT_LOOKAHEAD = 10080;
 
+
 function readEmail() {
   // This function is recommended to be run every minute. This can be changed in the "Triggers" sidetab of Google Apps Script. 
 
@@ -196,9 +197,9 @@ function adjustSchedule(title, subject, keywords, start, end, des){
     if (subject === "NEW"){
       let existingGroupEvent;
       if (i == 0 && groupFlag){
-        // Check if any event exists for this event item yet but only if we're on the first keyword
+        // Check if any event exists for this event item yet but only if we're on the first keyword.
         existingGroupEvent = findGroupEvent(groupCal, title, start, end);
-        // If there is an existing event, this is not new. The newGroupEvent flag will then persist as false for all subsequent keywords on this event.
+        // If there is an existing event, this is not new. The newGroupEvent flag will persist as false for all the subsequent keywords on this event.
         if (existingGroupEvent != null){
           newGroupEvent = false;
         }
@@ -239,20 +240,19 @@ function adjustSchedule(title, subject, keywords, start, end, des){
 
     // Cancel any existing event for this keyword if the email is about cancelling
     else if (subject === "CAN"){
-      // If it's a group event, lower the enrollment as necessary
-      if (groupFlag){
+      // If it's a group event, lower the enrollment as necessary. This is only done if the current keyword is "Group"
+      if (groupFlag && i == 0){
         // Check if any event exists for this event item yet.
         let existingGroupEvent = findGroupEvent(groupCal, title, start, end);
         // Adjust the event that was found ONLY if the current keyword is Group (else, we'll knock the event down in enrollment for every keyword it has)
-        if (existingGroupEvent != null && i == 0){
-          // If the whole group event is cancelled, adjustGroupEvent returns false. If the whole event is cancelled, then we want the full gamut of cancellation processes to run.
+        if (existingGroupEvent != null){
+          // when a group event is fully cancelled, adjustGroupEvent returns false. In that case, the full gamut of cancellation processes should run for the remaining keywords.
           groupFlagBlocker = !adjustGroupEvent(existingGroupEvent, false);
         }
         // If no event was found, log it.
-        else if (i == 0) {
+        else {
           Logger.log("Group Event could not be found for title " + title);
         }
-        
       }
       // If it is not a group event, proceed as normal
       else if (!groupFlag) {
@@ -304,13 +304,13 @@ function parseEmailBody(body){
       // A RegEx to match the format of << 75mins|KeyWord_1,Resource_1 >> or << 120mins|KeyWord_2,Resource_3 >>
       // Used on the last line of the body
 
-      Logger.log(body);
+      //Logger.log(body);
       let lastIndex = body.length - 1;
       let cleanup = body[lastIndex].split("|");
-      Logger.log("Cleanup Array: " + cleanup);
+      //Logger.log("Cleanup Array: " + cleanup);
       let unsplitKeys;
       let durationStr = cleanup[0].match(/(\d+).*/i).slice(1);
-      Logger.log("Duration Array: " + durationStr);
+      //Logger.log("Duration Array: " + durationStr);
       let duration = durationStr[0];
       let keywords = [];
       if (cleanup.length > 1){
@@ -322,7 +322,7 @@ function parseEmailBody(body){
       let title = body[0];
 
 
-      Logger.log("Base Event Title: " + title);
+      //Logger.log("Base Event Title: " + title);
 
       // The date + start time is in the format Wednesday, June 4, 2025, 1:45pm (Eastern). We need to drop the (Eastern) and the Weekday. 
       // We do this by using split(' ') to get an array with ["Wednesday,", "June", "4,", "2025," , "12:45pm" , "Eastern"]
@@ -442,7 +442,8 @@ function createGroupEvent(groupEventCalendar, title, startTime, endTime, descrip
 // Returns True if the event still exists after adjustment and returns False if the event gets deleted.
 function adjustGroupEvent(event, direction){
   Logger.log("Adjusting Group Event details.");
-  Logger.log("Adjustment direction is " + direction);
+  //Logger.log("Adjustment direction is " + direction);
+
   let description = event.getDescription();
   // Group event description in format
   // 0 Enrollment: # out of [Maximum] spaces filled.
@@ -465,26 +466,27 @@ function adjustGroupEvent(event, direction){
   let title = descriptionLines[4];
   let updatedTitle = title;
   let eventEnrollmentRules = ENROLLMENT_RULES[title];
-  Logger.log(descriptionLines);
+  //Logger.log(descriptionLines);
   let keywords = descriptionLines[5].match(/Tags: (.*)/)[1].split(", ");
 
-  // Extract the numbers from lines 0 and 1
+  // Extract the enrollment number from line 0
   let enrollment = parseInt(descriptionLines[0].match(/(\d*).*/)[1]);
-
+  Logger.log("Previous enrollment was " + enrollment);
   // The minimum is dependent on the enrollment, so it should not be parsed directly from the text.
   let minimum = eventEnrollmentRules[1] - enrollment;
 
   // If direction is True, then we are gaining an enrollee
-  if (direction){
+  if (direction === true){
     enrollment += 1;
     minimum -=1;
   }
   // If direction is False, then we are losing an enrollee. If it's null, then we are updating occupancy for a confirmed event and do not need to adjust enrollment.
-  else if (direction !== null) {
+  else if (direction === false) {
     enrollment -= 1;
     minimum += 1;
   }
 
+  Logger.log("Enrollment updated to " + enrollment);
   let newDescription;
 
   // if there's no direction to go (i.e. direction is 'null' then we are simply updating a confirmed event whose signup window has passed). No need to do anything fancy.
@@ -499,7 +501,12 @@ function adjustGroupEvent(event, direction){
 
     // Now that we've returned any unused occupancies, update the event so that no more people can sign up and "lock" it.
     descriptionLines[2] = "The sign-up window for this event has passed. To book another event, please use the following page:";
-    descriptionLines[3] = descriptionLines[3].match(/(.*)\d{4}-\d{2}-\d{2}.*/)[1];
+    try {
+      descriptionLines[3] = descriptionLines[3].match(/(.*)\d{4}-\d{2}-\d{2}.*/)[1];
+    }
+    catch{
+      Logger.log("Expected date-formatted Calendly link. Found " + descriptionLines[3]);
+    }
     descriptionLines.push("[Locked]");
     newDescription = descriptionLines.join("\n");
     event.setDescription(newDescription);
@@ -529,7 +536,7 @@ function adjustGroupEvent(event, direction){
     
     // If the event is full or seems like it might be overbooked, mark it as full and replace the instance-specific signup link with the general booking page.
     if (enrollment >= eventEnrollmentRules[2]){
-      descriptionLines[2] = "This event is full! If you need to schedule a training, please book a new training slot using the following link.";
+      descriptionLines[2] = "This event is full! If you need to schedule a training, please book a new training slot using the following link:";
       descriptionLines[3] = descriptionLines[3].match(/(.*)\d{4}-\d{2}-\d{2}.*/)[1];
       updatedTitle = GROUP_EVENT_PREFIXES[2] + title;
     }
@@ -547,9 +554,9 @@ function adjustGroupEvent(event, direction){
       // If the event gets deleted, return False
       return false;
     }
-    Logger.log("Changing Group Event details to match enrollment.");
+    //Logger.log("Changing Group Event details to match enrollment.");
     newDescription = descriptionLines.join("\n");
-    Logger.log("New details are:\n" + newDescription);
+    Logger.log("New event description is:\n" + newDescription);
     event.setTitle(updatedTitle);
     event.setDescription(newDescription);
     // If the event still exists after all that, return True
@@ -598,7 +605,7 @@ function checkEnrollments(){
   // Calls the keyword adjuster whenever there is an event whose time is finished.
   Logger.log("Checking for sub-minimum Group Events.");
   titles = Object.keys(ENROLLMENT_RULES);
-  
+  Logger.log(titles);
   for (let i = 0; i < titles.length; i++){
     // Find the relevant group calendar for each title. Because we are passing titles directly, we do not need to give a secondary title string.
     let enrolledCalendar = getCalendar(titles[i], "")[0];
@@ -612,7 +619,10 @@ function checkEnrollments(){
     // Search for tentative events with the same title
     let eventTitle = GROUP_EVENT_PREFIXES[0] + titles[i];
     let events = findUpcomingGroupEvent(enrolledCalendar, eventTitle);
-    Logger.log("Found " + events.length + " events to cancel.");
+    if (events.length > 0) {
+      Logger.log("Found " + events.length + " events to cancel.");
+    }
+    
     for (let j = 0; j < events.length; j++){
       // Find the edge of the buffer time for each event
       let bufferTime = events[j].getStartTime();
@@ -637,7 +647,12 @@ function checkEnrollments(){
     // Search for confirmed events with the same title
     eventTitle = GROUP_EVENT_PREFIXES[1] + titles[i];
     events = findUpcomingGroupEvent(enrolledCalendar, eventTitle);
-    Logger.log("Found " + events.length + " events to update occupancy for.");
+    if (events.length > 0){
+      Logger.log("Found " + events.length + " events to update occupancy for.");
+    }
+    else{
+      return
+    }
     for (let j = 0; j < events.length; j++){
       // Find the edge of the buffer time for each event
       let bufferTime = events[j].getStartTime();
@@ -755,7 +770,7 @@ function adjustOccupancy(calendarId, keyword, startTime, endTime, cancellation){
   }
 
   if (num == -1){
-    Logger.log("Keyword did not have occupancy data.");
+    //Logger.log("Keyword did not have occupancy data.");
     return null;
   }
 
@@ -961,7 +976,7 @@ function htmlDeleter(html){
   return bodyList;
 }
 
-// This is just a really basic utility function that converts the name of a month into a number from 0-11
+// This is a basic utility function that converts the name of a month into a number from 0-11
 function getMonthIndex(monthName) {
   const months = [
     "january", "february", "march", "april", "may", "june",
