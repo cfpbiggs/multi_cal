@@ -61,7 +61,6 @@ const GROUP_EVENT_PREFIXES = ["Tentative: ", "Confirmed: ", "Full: "];
 // This is the amount of time our automatic group event-checker will look ahead for events in need of cancelling. The longer it is, the longer the checker will take to run. 10080 is 1 week in minutes.
 const GROUP_EVENT_LOOKAHEAD = 10080;
 
-
 function readEmail() {
   // This function is recommended to be run every minute. This can be changed in the "Triggers" sidetab of Google Apps Script. 
 
@@ -83,13 +82,16 @@ function readEmail() {
 
       // While the thread may have been marked unread, that doesn't mean that *all* of the messages within the thread were unread. It usually means the most recent message is unread.
       // If this message has already been read, skip it.
-      if(!message.isUnread()) continue;
+      if(!message.isUnread()){
+        continue
+      }
+        
 
       // Check the subject line of the message
       let subject = message.getSubject().substring(0,3).toUpperCase(); // We only need the first three characters to know what we're doing.
       let body = htmlDeleter(message.getBody()); // Retrieve event information from the HTML block in the body of the message
 
-      // Check that the email body has the right number of lines for an event email. If it doesn't, skip it.
+      // Check that the email body has the minimum number of lines for an event email. If it doesn't, skip it.
       if (body.length < 3){
         message.markRead();
         Logger.log("A Calendly email was received, but its body was too short.");
@@ -116,12 +118,13 @@ function readEmail() {
         // Use the extracted details to add or remove the event from the schedule and record whether the message ought to be deleted.
         let deleteFlag = adjustSchedule(title, subject, keywords, start, end, des);
         
-        // Delete the email after logging the output if everything ran correctly
+        // Read the email to prevent double-processing and delete the email if everything ran correctly.
         if (deleteFlag){
+          message.markRead();
           message.moveToTrash();
-          Logger.log("Message Deleted.")
+          Logger.log("Message Read and Deleted.")
         }
-        // If the deleteFlag was turned off, mark message read instead of deleting.
+        // If the deleteFlag was turned off, mark message read but do not delete.
         else{
           message.markRead();
           Logger.log("Message Read")
@@ -549,7 +552,7 @@ function adjustGroupEvent(event, direction){
 
     // If nobody is left enrolled in the event, delete it.
     else if(enrollment == 0){
-      adjustGroupEventKeywords(title, event.getStartTime(), event.getEndTime(), keywords, enrollment);
+      // Occupancy and other keywords will be handled by the adjustSchedule function, so all that needs deleting is the Group Event
       event.deleteEvent();
       // If the event gets deleted, return False
       return false;
@@ -1008,3 +1011,4 @@ function getCalendar(keyword, title){
 
   return [calID, superKeys];
 }
+
