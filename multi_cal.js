@@ -113,8 +113,8 @@ function readEmail() {
           continue
         }
 
-        // Replace HTML notation with actual ampersand
-        title = title.replace("&amp;", "&");
+        // Replace HTML escapements with actual special characters
+        title = escapeReplace(title);
         // Use the extracted details to add or remove the event from the schedule and record whether the message ought to be deleted.
         let deleteFlag = adjustSchedule(title, subject, keywords, start, end, des);
         
@@ -466,8 +466,8 @@ function adjustGroupEvent(event, direction){
     descriptionLines = descriptionLines[0].split("<br>");
   }
   
-  let title = descriptionLines[4];
-  let updatedTitle = title;
+  let title = escapeReplace(descriptionLines[4]);
+  Logger.log("Event title is: " + title);
   let eventEnrollmentRules = ENROLLMENT_RULES[title];
   //Logger.log(descriptionLines);
   let keywords = descriptionLines[5].match(/Tags: (.*)/)[1].split(", ");
@@ -947,6 +947,16 @@ function createInstanceLink(bookingPage, startTime){
 }
 
 
+// This function replaces HTML escapement placeholders with their special character counterparts. Returns a cleaned string.
+function escapeReplace(original){
+  return original.replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+
 // This function takes the HTML body of the email and scrapes out the event information from it.
 // To troubleshoot this function, print out the output and see if the RegEX is missing any weird clips of HTML or CSS. Add an expression for that missing clip to the end of the replace block.
 // If the function is cutting out information you need, check the slice call at the end of the function and check if it needs changing.
@@ -1011,4 +1021,3 @@ function getCalendar(keyword, title){
 
   return [calID, superKeys];
 }
-
