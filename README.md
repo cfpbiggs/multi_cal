@@ -1,3 +1,8 @@
+# Rewrite Notice
+As of January 2026, this codebase is going to be rewritten in a manner that fundamentally overhauls its features. This comes on the heels of several issues with Calendly's workflow process sending updates that are significantly delayed (some by up to 5 days). The plan is to rewrite multi_cal as a more open-ended Rust library with the ability to directly call Calendly's API and Google Calendar's API. While this does introduce managing OAuth tokens and server hosting to the complexity of the service, it grants the ability to verify scheduling information directly with Calendly, synchronize enrollments without Workflow dependence, cancel events that meet cancellation criteria on the client-side without manually doing so via Calendly, and remove event description metadata (duration and keywords) although Exception Rules will still need to be applied.
+
+## This codebase will not be updated or debugged until the rewrite is complete. Thank you for your understanding.
+
 # multi_cal Overview
 multi_cal is a utility built on behalf of the Harvard SEAS Active Learning Labs for aligning shared calendars between its workshops and sub-groups. Its purpose is to fill in the gaps of Calendly's capabilities on the client-side through the use of the Google Suite's API.
 
